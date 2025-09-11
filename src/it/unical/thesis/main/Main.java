@@ -53,7 +53,7 @@ public class Main {
 	
     
 
-	private static void generateNewCertificates(String certsPath, List<CertificateInfo> certificatesList)
+	private static void cleanUpCertsAndGenerateNewCertificates(String certsPath, List<CertificateInfo> certificatesList)
 	{
 		CertificateInfo caInfo = CertificateChainAnalyzer.getRootCACertificate(certificatesList);
 		CertificateInfo serverInfo = CertificateChainAnalyzer.getServerCertificate(certificatesList);
@@ -63,6 +63,9 @@ public class Main {
 		try {			
 			/*File freeradiusCertsDir = new File(FREERADIUS_CERTS_PATH);
 			if(freeradiusCertsDir.exists()) {
+			
+			cleanUpCerts(FREERADIUS_CERTS_PATH);
+			
 			generator.generateConfigurations(caInfo, serverInfo, 
 					TEMPLATES_PATH+"/"+CA_CNF_FILE_NAME, TEMPLATES_PATH+"/"+SERVER_CNF_FILE_NAME,
 					FREERADIUS_CERTS_PATH+"/"+CA_CNF_FILE_NAME, FREERADIUS_CERTS_PATH+"/"+SERVER_CNF_FILE_NAME, PolicyType.FLEXIBLE, PolicyType.FLEXIBLE);
@@ -258,8 +261,7 @@ public class Main {
 		if(accessPoint.supportsIeee8021x()) {
 			List<CertificateInfo> certificatesList = retrieveRadiusCertificates(accessPoint.getSsid(),accessPoint.getIeee80211w(),chosenWirelessInterface);
 			if(certificatesList!=null) {
-				cleanUpCerts(FREERADIUS_CERTS_PATH);
-				generateNewCertificates(FREERADIUS_CERTS_PATH, certificatesList);
+				cleanUpCertsAndGenerateNewCertificates(FREERADIUS_CERTS_PATH, certificatesList);
 			}
 		}
 		
