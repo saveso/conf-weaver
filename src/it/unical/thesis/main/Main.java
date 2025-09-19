@@ -296,6 +296,9 @@ public class Main {
 			return;
 		}
 		printRequiredTools();
+		File outputDir = new File(TMP_PATH);
+		if(!outputDir.exists())
+			outputDir.mkdir();
 
 		System.out.println("conf-weaver starting...");
 		//TODO should I use java.net?
