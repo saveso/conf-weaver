@@ -10,7 +10,7 @@ public class DateConverter {
 
     public static String convertToOpenSSLFormat(String dateString) {
         if (dateString == null || dateString.trim().isEmpty()) {
-            throw new IllegalArgumentException("Data string non può essere null o vuota");
+            throw new IllegalArgumentException("Date string cannot be null or empty");
         }
         
         try {
@@ -25,22 +25,22 @@ public class DateConverter {
             return formatted;
             
         } catch (DateTimeParseException e) {
-            throw new IllegalArgumentException("Formato data non valido: " + dateString + 
-                ". Formato atteso: 'MMM dd HH:mm:ss yyyy GMT' (es. 'Aug 27 16:52:32 2025 GMT')", e);
+            throw new IllegalArgumentException("Invalid date format: " + dateString + 
+                ". Expected format: 'MMM dd HH:mm:ss yyyy GMT' (e.g. 'Aug 27 16:52:32 2025 GMT')", e);
         }
     }
     
 
     public static String convertFromOpenSSLFormat(String opensslDate) {
         if (opensslDate == null || opensslDate.trim().isEmpty()) {
-            throw new IllegalArgumentException("OpenSSL date string non può essere null o vuota");
+            throw new IllegalArgumentException("OpenSSL date string cannot be null or empty");
         }
         
         try {
             String cleanDate = opensslDate.replace("Z", "").trim();
             
             if (cleanDate.length() != 12) {
-                throw new IllegalArgumentException("Lunghezza non valida. Attesi 12 caratteri + Z");
+                throw new IllegalArgumentException("Invalid length. Expected 12 characters + Z");
             }
             
             DateTimeFormatter inputFormatter = DateTimeFormatter.ofPattern("yyMMddHHmmss");
@@ -52,8 +52,8 @@ public class DateConverter {
             return formatted;
             
         } catch (DateTimeParseException e) {
-            throw new IllegalArgumentException("Formato OpenSSL non valido: " + opensslDate + 
-                ". Formato atteso: 'YYMMDDHHMMSSZ' (es. '250827165232Z')", e);
+            throw new IllegalArgumentException("Invalid OpenSSL format: " + opensslDate + 
+                ". Expected format: 'YYMMDDHHMMSSZ' (e.g. '250827165232Z')", e);
         }
     }
   

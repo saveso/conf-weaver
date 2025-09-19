@@ -2,8 +2,6 @@ package it.unical.thesis.process;
 
 import java.util.List;
 
-import it.unical.thesis.reader.ProcessReader;
-
 public class Bootstrap extends AbstractCommand{
 
 	private static final String NAME = "bootstrap_enhanced";

@@ -10,7 +10,8 @@ public class Systemctl extends AbstractCommand{
 	}
 
 
-	public void stop(String serviceName)
+
+	private void stop(String serviceName)
 	{
 		final String[] command = {NAME, "stop", serviceName};
 		this.execute(command);
@@ -18,13 +19,25 @@ public class Systemctl extends AbstractCommand{
 	}
 	
 
-	public void restart(String serviceName)
+	private void restart(String serviceName)
 	{
 		final String[] command = {NAME, "restart", serviceName};
 		this.execute(command);
 		this.waitIndefinitelyForCompletion();
 	}
 	
+	
+	public void stopNetworkManagerAndWpaSupplicant()
+	{
+		stop("NetworkManager");
+		stop("wpa_supplicant");
+	}
+	
+	public void restartNetworkManager()
+	{
+		//restart("wpa_supplicant");
+		restart("NetworkManager");
+	}
 	
 
 }

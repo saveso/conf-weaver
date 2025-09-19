@@ -1,0 +1,442 @@
+#!/bin/bash
+#
+#  Enhanced bootstrap script for FreeRADIUS certificates - FIXED VERSION
+#  Supports separate custom serial numbers and validity dates for CA and certificates
+#  IMPORTANT FIX: Added -extensions v3_ca to CA certificate generation
+#
+#  Usage: ./bootstrap_enhanced [OPTIONS]
+#  
+#  Options:
+#    --ca-serial SERIAL        Set CA serial number (hex format, e.g., 01, FF, 1A2B)
+#    --server-serial SERIAL    Set server certificate serial number (hex format)
+#    --client-serial SERIAL    Set client certificate serial number (hex format)
+#    --ca-start-date DATE      Set CA certificate start date (YYMMDDHHMMSSZ format)
+#    --ca-end-date DATE        Set CA certificate end date (YYMMDDHHMMSSZ format)
+#    --cert-start-date DATE    Set server/client certificates start date (YYMMDDHHMMSSZ format)
+#    --cert-end-date DATE      Set server/client certificates end date (YYMMDDHHMMSSZ format)
+#
+#  Date format examples:
+#    250101120000Z = January 1, 2025, 12:00:00 UTC
+#    251231235959Z = December 31, 2025, 23:59:59 UTC
+#
+#  Example:
+#    ./bootstrap_enhanced --ca-serial A1 --server-serial B2 --client-serial C3 \
+#                         --ca-start-date 250101120000Z --ca-end-date 351231235959Z \
+#                         --cert-start-date 250101120000Z --cert-end-date 251231235959Z
+#
+umask 027
+cd `dirname $0`
+
+# Parse command line arguments
+CA_SERIAL=""
+SERVER_SERIAL=""
+CLIENT_SERIAL=""
+CA_START_DATE=""
+CA_END_DATE=""
+CERT_START_DATE=""
+CERT_END_DATE=""
+
+# Debug: show what we received
+echo "Script called with: $*"
+
+while [[ $# -gt 0 ]]; do
+    key="$1"
+    echo "Processing argument: '$key'"
+    
+    case "$key" in
+        --ca-serial)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --ca-serial requires a value"
+                exit 1
+            fi
+            CA_SERIAL="$2"
+            echo "Set CA serial to: $CA_SERIAL"
+            shift # past argument
+            shift # past value
+            ;;
+        --server-serial)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --server-serial requires a value"
+                exit 1
+            fi
+            SERVER_SERIAL="$2"
+            echo "Set server serial to: $SERVER_SERIAL"
+            shift # past argument
+            shift # past value
+            ;;
+        --client-serial)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --client-serial requires a value"
+                exit 1
+            fi
+            CLIENT_SERIAL="$2"
+            echo "Set client serial to: $CLIENT_SERIAL"
+            shift # past argument
+            shift # past value
+            ;;
+        --ca-start-date)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --ca-start-date requires a value"
+                exit 1
+            fi
+            CA_START_DATE="$2"
+            echo "Set CA start date to: $CA_START_DATE"
+            shift # past argument
+            shift # past value
+            ;;
+        --ca-end-date)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --ca-end-date requires a value"
+                exit 1
+            fi
+            CA_END_DATE="$2"
+            echo "Set CA end date to: $CA_END_DATE"
+            shift # past argument
+            shift # past value
+            ;;
+        --cert-start-date)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --cert-start-date requires a value"
+                exit 1
+            fi
+            CERT_START_DATE="$2"
+            echo "Set certificates start date to: $CERT_START_DATE"
+            shift # past argument
+            shift # past value
+            ;;
+        --cert-end-date)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --cert-end-date requires a value"
+                exit 1
+            fi
+            CERT_END_DATE="$2"
+            echo "Set certificates end date to: $CERT_END_DATE"
+            shift # past argument
+            shift # past value
+            ;;
+        -h|--help)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --ca-serial SERIAL        Set CA serial number (hex format)"
+            echo "  --server-serial SERIAL    Set server certificate serial number (hex format)"
+            echo "  --client-serial SERIAL    Set client certificate serial number (hex format)"
+            echo "  --ca-start-date DATE      Set CA certificate start date (YYMMDDHHMMSSZ)"
+            echo "  --ca-end-date DATE        Set CA certificate end date (YYMMDDHHMMSSZ)"
+            echo "  --cert-start-date DATE    Set server/client certificates start date (YYMMDDHHMMSSZ)"
+            echo "  --cert-end-date DATE      Set server/client certificates end date (YYMMDDHHMMSSZ)"
+            echo ""
+            echo "Examples:"
+            echo "  $0 --ca-serial A1 --server-serial B2 --client-serial C3"
+            echo "  $0 --ca-start-date 250101120000Z --ca-end-date 351231235959Z"
+            echo "  $0 --cert-start-date 250101120000Z --cert-end-date 251231235959Z"
+            exit 0
+            ;;
+        -*)
+            echo "Error: Unknown option '$key'"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+        *)
+            echo "Error: Unexpected argument '$key'"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# Summary of parsed arguments
+echo ""
+echo "=== Parsed Configuration ==="
+echo "CA Serial: '${CA_SERIAL:-auto}'"
+echo "Server Serial: '${SERVER_SERIAL:-auto}'"
+echo "Client Serial: '${CLIENT_SERIAL:-auto}'"
+echo "CA Start Date: '${CA_START_DATE:-default}'"
+echo "CA End Date: '${CA_END_DATE:-default}'"
+echo "Certificates Start Date: '${CERT_START_DATE:-default}'"
+echo "Certificates End Date: '${CERT_END_DATE:-default}'"
+echo ""
+
+# Validate date format function
+validate_date() {
+    local date_str="$1"
+    local param_name="$2"
+    
+    if [ -n "$date_str" ]; then
+        # Check format: YYMMDDHHMMSSZ (13 characters, ending with Z)
+        if [ ${#date_str} -ne 13 ] || [ "${date_str#${date_str%?}}" != "Z" ]; then
+            echo "Error: $param_name must be in format YYMMDDHHMMSSZ (e.g., 250101120000Z)"
+            exit 1
+        fi
+    fi
+}
+
+# Validate serial format function
+validate_serial() {
+    local serial_str="$1"
+    local param_name="$2"
+    
+    if [ -n "$serial_str" ]; then
+        # Check if serial contains only hex characters
+        echo "$serial_str" | grep -E '^[0-9A-Fa-f]+$' > /dev/null
+        if [ $? -ne 0 ]; then
+            echo "Error: $param_name must contain only hexadecimal characters (0-9, A-F, a-f)"
+            exit 1
+        fi
+    fi
+}
+
+# Validate all inputs
+validate_date "$CA_START_DATE" "--ca-start-date"
+validate_date "$CA_END_DATE" "--ca-end-date"
+validate_date "$CERT_START_DATE" "--cert-start-date"
+validate_date "$CERT_END_DATE" "--cert-end-date"
+
+validate_serial "$CA_SERIAL" "--ca-serial"
+validate_serial "$SERVER_SERIAL" "--server-serial"
+validate_serial "$CLIENT_SERIAL" "--client-serial"
+
+echo "Starting certificate generation..."
+
+make -h > /dev/null 2>&1
+
+#
+#  If we have a working "make", then use it for DH params only
+#  We'll handle certificates manually to support custom dates
+#
+if [ "$?" = "0" ] && [ ! -f dh ]; then
+  make dh
+fi
+
+#
+#  Generate DH parameters if not present
+#
+if [ ! -f dh ]; then
+  echo "Generating DH parameters..."
+  openssl dhparam -out dh 2048 || exit 1
+  if [ -e /dev/urandom ] ; then
+	ln -sf /dev/urandom random
+  else
+	date > ./random;
+  fi
+fi
+
+#
+#  Generate CA certificate FIRST
+#  CRITICAL FIX: Added -extensions v3_ca to include all extensions from [v3_ca] section
+#
+if [ ! -f ca.key ]; then
+  echo "Generating CA certificate..."
+  
+  # Build CA command with custom dates if provided
+  # IMPORTANT: -extensions v3_ca ensures crlDistributionPoints and other extensions are included
+  CA_CMD="openssl req -new -x509 -keyout ca.key -out ca.pem -config ./ca.cnf -extensions v3_ca"
+  
+  if [ -n "$CA_START_DATE" ] && [ -n "$CA_END_DATE" ]; then
+    CA_CMD="$CA_CMD -not_before $CA_START_DATE -not_after $CA_END_DATE"
+  else
+    # Use default days from config
+    DEFAULT_DAYS=`grep default_days ca.cnf | sed 's/.*=//;s/^ *//'`
+    CA_CMD="$CA_CMD -days $DEFAULT_DAYS"
+  fi
+  
+  if [ -n "$CA_SERIAL" ]; then
+    CA_CMD="$CA_CMD -set_serial 0x$CA_SERIAL"
+    echo "Using custom CA serial: $CA_SERIAL"
+  fi
+  
+  echo "Executing CA generation command: $CA_CMD"
+  eval $CA_CMD || exit 1
+  
+  # Verify CA certificate includes correct extensions
+  echo "Verifying CA certificate extensions..."
+  if openssl x509 -in ca.pem -text -noout | grep -q "crlDistributionPoints"; then
+    echo "✓ CA certificate includes CRL Distribution Points"
+    openssl x509 -in ca.pem -text -noout | grep -A 2 "CRL Distribution Points"
+  else
+    echo "⚠ WARNING: CA certificate missing CRL Distribution Points - check ca.cnf [v3_ca] section"
+  fi
+fi
+
+#
+#  Generate server private key
+#
+if [ ! -f server.key ]; then
+  echo "Generating server private key..."
+  openssl req -new -out server.csr -keyout server.key -config ./server.cnf || exit 1
+  chmod g+r server.key
+fi
+
+#
+#  Initialize CA database files
+#
+if [ ! -f index.txt ]; then
+  touch index.txt
+fi
+
+# Function to ensure serial has at least 2 digits
+pad_serial() {
+    local serial="$1"
+    if [ ${#serial} -lt 2 ]; then
+        printf "%02s" "$serial" | tr ' ' '0'
+    else
+        echo "$serial"
+    fi
+}
+
+# Initialize serial file with server serial or default
+if [ ! -f serial ]; then
+  if [ -n "$SERVER_SERIAL" ]; then
+    PADDED_SERVER_SERIAL=$(pad_serial "$SERVER_SERIAL")
+    echo "$PADDED_SERVER_SERIAL" > serial
+    echo "Initialized serial file with server serial: $SERVER_SERIAL (padded to: $PADDED_SERVER_SERIAL)"
+  else
+    echo '01' > serial
+    echo "Initialized serial file with default: 01"
+  fi
+fi
+
+#
+#  Generate server certificate
+#
+if [ ! -f server.crt ]; then
+  echo "Generating server certificate..."
+  
+  # Set specific serial for server if provided
+  if [ -n "$SERVER_SERIAL" ]; then
+    PADDED_SERVER_SERIAL=$(pad_serial "$SERVER_SERIAL")
+    echo "$PADDED_SERVER_SERIAL" > serial
+    echo "Set serial for server certificate: $SERVER_SERIAL (padded to: $PADDED_SERVER_SERIAL)"
+  fi
+  
+  # Build server cert command with custom dates if provided
+  SERVER_CMD="openssl ca -batch -keyfile ca.key -cert ca.pem -in server.csr -out server.crt -extensions xpserver_ext -extfile xpextensions -config ./server.cnf"
+  
+  # Add password
+  OUTPUT_PASS=`grep output_password ca.cnf | sed 's/.*=//;s/^ *//'`
+  SERVER_CMD="$SERVER_CMD -key $OUTPUT_PASS"
+  
+  # Add custom dates if provided
+  if [ -n "$CERT_START_DATE" ]; then
+    SERVER_CMD="$SERVER_CMD -startdate $CERT_START_DATE"
+  fi
+  
+  if [ -n "$CERT_END_DATE" ]; then
+    SERVER_CMD="$SERVER_CMD -enddate $CERT_END_DATE"
+  fi
+  
+  eval $SERVER_CMD || exit 1
+fi
+
+#
+#  Generate PKCS#12 format
+#
+if [ ! -f server.p12 ]; then
+  echo "Generating PKCS#12 certificate..."
+  OUTPUT_PASS=`grep output_password server.cnf | sed 's/.*=//;s/^ *//'`
+  openssl pkcs12 -export -in server.crt -inkey server.key -out server.p12 -passin pass:$OUTPUT_PASS -passout pass:$OUTPUT_PASS || exit 1
+  chmod g+r server.p12
+fi
+
+#
+#  Generate PEM format and verify
+#
+if [ ! -f server.pem ]; then
+  echo "Generating PEM certificate and verifying..."
+  OUTPUT_PASS=`grep output_password server.cnf | sed 's/.*=//;s/^ *//'`
+  openssl pkcs12 -in server.p12 -out server.pem -passin pass:$OUTPUT_PASS -passout pass:$OUTPUT_PASS || exit 1
+  openssl verify -CAfile ca.pem server.pem || exit 1
+  chmod g+r server.pem
+fi
+
+#
+#  Generate DER format CA certificate
+#
+if [ ! -f ca.der ]; then
+  echo "Generating DER format CA certificate..."
+  openssl x509 -inform PEM -outform DER -in ca.pem -out ca.der || exit 1
+fi
+
+#
+#  Generate client certificates
+#
+if [ ! -f client.key ]; then
+  echo "Generating client private key..."
+  openssl req -new -out client.csr -keyout client.key -config ./client.cnf
+  chmod g+r client.key
+fi
+
+if [ ! -f client.crt ]; then
+  echo "Generating client certificate..."
+  
+  # Set specific serial for client if provided
+  if [ -n "$CLIENT_SERIAL" ]; then
+    PADDED_CLIENT_SERIAL=$(pad_serial "$CLIENT_SERIAL")
+    echo "$PADDED_CLIENT_SERIAL" > serial
+    echo "Set serial for client certificate: $CLIENT_SERIAL (padded to: $PADDED_CLIENT_SERIAL)"
+  fi
+  
+  # Build client cert command with custom dates if provided
+  CLIENT_CMD="openssl ca -batch -keyfile ca.key -cert ca.pem -in client.csr -out client.crt -extensions xpclient_ext -extfile xpextensions -config ./client.cnf"
+  
+  # Add password
+  OUTPUT_PASS=`grep output_password ca.cnf | sed 's/.*=//;s/^ *//'`
+  CLIENT_CMD="$CLIENT_CMD -key $OUTPUT_PASS"
+  
+  # Add custom dates if provided (same as server cert)
+  if [ -n "$CERT_START_DATE" ]; then
+    CLIENT_CMD="$CLIENT_CMD -startdate $CERT_START_DATE"
+  fi
+  
+  if [ -n "$CERT_END_DATE" ]; then
+    CLIENT_CMD="$CLIENT_CMD -enddate $CERT_END_DATE"
+  fi
+  
+  eval $CLIENT_CMD
+fi
+
+echo ""
+echo "=== Certificate generation completed successfully! ==="
+
+# Display certificate information with enhanced verification
+if [ -f ca.pem ]; then
+  echo ""
+  echo "=== CA Certificate Information ==="
+  openssl x509 -in ca.pem -noout -subject -issuer -dates -serial
+  echo ""
+  echo "=== CA Certificate Extensions Verification ==="
+  if openssl x509 -in ca.pem -text -noout | grep -q "X509v3 extensions"; then
+    echo "✓ CA certificate includes X.509v3 extensions:"
+    openssl x509 -in ca.pem -text -noout | grep -A 10 "X509v3 extensions:"
+  else
+    echo "⚠ WARNING: CA certificate missing X.509v3 extensions"
+  fi
+fi
+
+if [ -f server.crt ]; then
+  echo ""
+  echo "=== Server Certificate Information ==="
+  openssl x509 -in server.crt -noout -subject -issuer -dates -serial
+fi
+
+if [ -f client.crt ]; then
+  echo ""
+  echo "=== Client Certificate Information ==="
+  openssl x509 -in client.crt -noout -subject -issuer -dates -serial
+fi
+
+echo ""
+echo "=== Summary ==="
+echo "Generated certificates with the following configuration:"
+echo "CA Serial: ${CA_SERIAL:-auto-generated}"
+echo "Server Serial: ${SERVER_SERIAL:-auto-generated}"  
+echo "Client Serial: ${CLIENT_SERIAL:-auto-generated}"
+echo "CA Dates: ${CA_START_DATE:-default} to ${CA_END_DATE:-default}"
+echo "Certificate Dates: ${CERT_START_DATE:-default} to ${CERT_END_DATE:-default}"
+
+# Final verification message
+echo ""
+echo "=== IMPORTANT NOTES ==="
+echo "✓ CA certificate now includes -extensions v3_ca (FIXED)"
+echo "✓ This ensures crlDistributionPoints and other extensions are properly included"
+echo "✓ Remove old certificates before running this script to regenerate with correct extensions"

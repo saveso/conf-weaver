@@ -14,7 +14,7 @@ public class SerialConverter {
 
     public static String convertSerialToOpenSSLFormat(String serialNumber) {
         if (serialNumber == null || serialNumber.trim().isEmpty()) {
-            throw new IllegalArgumentException("Serial number non può essere null o vuoto");
+            throw new IllegalArgumentException("Serial number cannot be null or empty");
         }
         
         String trimmed = serialNumber.trim();
@@ -41,7 +41,7 @@ public class SerialConverter {
             result = decimal.toString(16).toUpperCase();
         }
         else {
-            throw new IllegalArgumentException("Formato serial number non riconosciuto: " + serialNumber);
+            throw new IllegalArgumentException("Unrecognized serial number format: " + serialNumber);
         }
         
         return padSerial(result);
@@ -58,13 +58,13 @@ public class SerialConverter {
 
     public static String convertFromOpenSSLFormat(String opensslSerial) {
         if (opensslSerial == null || opensslSerial.trim().isEmpty()) {
-            throw new IllegalArgumentException("OpenSSL serial non può essere null o vuoto");
+            throw new IllegalArgumentException("OpenSSL serial cannot be null or empty");
         }
         
         String hex = opensslSerial.trim().toUpperCase();
         
         if (!hex.matches("^[0-9A-F]+$")) {
-            throw new IllegalArgumentException("Serial OpenSSL deve contenere solo caratteri esadecimali: " + opensslSerial);
+            throw new IllegalArgumentException("OpenSSL serial must contain only hexadecimal characters: " + opensslSerial);
         }
         
         BigInteger decimal = new BigInteger(hex, 16);
@@ -82,7 +82,7 @@ public class SerialConverter {
 
     public static String formatWithColons(String hexSerial) {
         if (hexSerial == null || hexSerial.trim().isEmpty()) {
-            throw new IllegalArgumentException("Hex serial non può essere null o vuoto");
+            throw new IllegalArgumentException("Hex serial cannot be null or empty");
         }
         
         String hex = hexSerial.trim().toUpperCase();

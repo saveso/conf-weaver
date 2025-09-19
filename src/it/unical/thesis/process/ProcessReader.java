@@ -1,4 +1,4 @@
-package it.unical.thesis.reader;
+package it.unical.thesis.process;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -30,7 +30,6 @@ public class ProcessReader extends Thread {
 		String line;
 		try {
 			while ((line = reader.readLine()) != null) {
-				//read everything
 				System.out.println(line);
 				lines.add(line);
 			}

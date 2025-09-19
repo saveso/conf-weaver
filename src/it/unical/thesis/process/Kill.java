@@ -1,7 +1,5 @@
 package it.unical.thesis.process;
 
-import it.unical.thesis.reader.ProcessReader;
-
 public class Kill extends AbstractCommand{
 	
 	private static final String NAME = "kill";
